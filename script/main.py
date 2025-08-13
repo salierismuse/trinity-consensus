@@ -4,6 +4,8 @@ import subprocess
 from dotenv import load_dotenv
 import time
 
+start_time = time.perf_counter()
+
 #setup
 load_dotenv()
 db_host = os.getenv("DB_HOST")
@@ -12,18 +14,8 @@ MODEL2 = os.getenv("MODEL2")
 MODEL3 = os.getenv("MODEL3")
 
 kobold = "../koboldcpp.exe"
-port1 = "5001"
-port2 = "5002"
-port3 = "5003"
 
 models = [MODEL2, MODEL3, MODEL1]
-
-layers = ["8", "25", "25"]
-
-def run_model(model, port, layers):
-    return subprocess.Popen([kobold, "--model", model, "--gpulayers", layers, "--port", port], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-port_pairs = {"llama": port1, "gemma": port2, "mistral": port3}
 
 def wait_for_api(port, timeout=60):
     start_time = time.time()
@@ -36,14 +28,15 @@ def wait_for_api(port, timeout=60):
             time.sleep(2)
     return False
 
-def ask_agent(port, question):
+def ask_agent(port, question, model_path):
     url = f"http://localhost:{port}/v1/chat/completions"
     
     payload = {
+        "model": model_path,
         "messages": [
             {"role": "user", "content": question}
         ],
-        "max_tokens": 50,
+        "max_tokens": 150,
         "temperature": 0.7
     }
     
@@ -56,34 +49,29 @@ def get_response_text(response):
     except (KeyError, IndexError):
         return "error getting response"
 
-question = "should i be a powerlifter or a bodybuilder? answer decisively in one sentence at the start, then explain in three short bullet points why"
+question = ""
 responses = []
 
-ports = ["5001", "5002", "5003"]
+#make this more general later!
+s = subprocess.Popen(
+    [kobold, "--model", models[0], "--model", models[1], "--model", models[2], "--gpulayers", "35", "--port", "5001"],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL
+)
+wait_for_api("5001")
 
-for i in range(3):
-    s = run_model(models[i], ports[i], layers[i])
-    wait_for_api(ports[i])
-    text = get_response_text(ask_agent(ports[i], question))
+for model in models:
+    text = get_response_text(ask_agent("5001", question, model))
     responses.append(text)
-    try:
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "koboldcpp.exe", "/T"],
-            check=True,
-            capture_output=True
-        )
-        print("terminated process.")
-
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 128:
-            print("process not found, did you choose correct .exe?")
-        else:
-            print(f"unexpected error {e.stderr.decode()}")
-    time.sleep(1)
 
 for i in range(3): 
     print(models[i])
     print("\n")
     print(responses[i])
 
-print("test")
+subprocess.run(["taskkill", "/F", "/IM", "koboldcpp.exe", "/T"],)
+
+
+end_time = time.perf_counter()
+elapsed_time = end_time - start_time
+print(elapsed_time)
