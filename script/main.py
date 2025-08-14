@@ -3,8 +3,16 @@ import os
 import subprocess
 from dotenv import load_dotenv
 import time
+from multiprocessing import Pool
+import threading
+os.environ['LLAMA_CPP_VULKAN'] = '1'
+os.environ['GGML_VULKAN_DEVICE'] = '0'
+from llama_cpp import Llama
 
-start_time = time.perf_counter()
+#TODO
+#auto kill kobold on any crash. probably gonna need a lot of try excepts. eats memory like an MF
+
+
 
 #setup
 load_dotenv()
@@ -12,65 +20,46 @@ db_host = os.getenv("DB_HOST")
 MODEL1 = os.getenv("MODEL1")
 MODEL2 = os.getenv("MODEL2") 
 MODEL3 = os.getenv("MODEL3")
+LLAMA_ADDR = os.getenv("LLAMA_ADDR")
 
-kobold = "../koboldcpp.exe"
-
-models = [MODEL2, MODEL3, MODEL1]
-
-def wait_for_api(port, timeout=60):
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            response = requests.get(f"http://localhost:{port}/api/v1/models")
-            if response.status_code == 200:
-                return True
-        except:
-            time.sleep(2)
-    return False
-
-def ask_agent(port, question, model_path):
-    url = f"http://localhost:{port}/v1/chat/completions"
-    
-    payload = {
-        "model": model_path,
-        "messages": [
-            {"role": "user", "content": question}
-        ],
-        "max_tokens": 150,
-        "temperature": 0.7
-    }
-    
-    response = requests.post(url, json=payload)
-    return response.json()
-
-def get_response_text(response):
-    try:
-        return response['choices'][0]['message']['content']
-    except (KeyError, IndexError):
-        return "error getting response"
-
-question = ""
-responses = []
-
-#make this more general later!
-s = subprocess.Popen(
-    [kobold, "--model", models[0], "--model", models[1], "--model", models[2], "--gpulayers", "35", "--port", "5001"],
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL
+models = [MODEL3, MODEL2, MODEL1]
+start_time = time.perf_counter()
+llm = Llama(
+    model_path=MODEL1,
+    n_gpu_layers=25,  # use all gpu layers with vulkan
+    verbose=False
 )
-wait_for_api("5001")
 
-for model in models:
-    text = get_response_text(ask_agent("5001", question, model))
-    responses.append(text)
+llm2 = Llama(
+    model_path=MODEL2,
+    n_gpu_layers=25,  # use all gpu layers with vulkan
+    verbose=False
+)
 
-for i in range(3): 
-    print(models[i])
-    print("\n")
-    print(responses[i])
+llm3 = Llama(
+    model_path=MODEL3,
+    n_gpu_layers=25,  # use all gpu layers with vulkan
+    verbose=False
+)
+end_time = time.perf_counter()
+elapsed_time = end_time - start_time
+print(elapsed_time)
+llms = [llm, llm2, llm3]
 
-subprocess.run(["taskkill", "/F", "/IM", "koboldcpp.exe", "/T"],)
-
+question = "should i have eggs or oatmeal? CHOOSE ONE DEFINITIVELY IN FIRST SENTENCE"
+ans = []
+def ask_model(model, q, tokens):
+    ans.append(model(q, max_tokens=tokens)['choices'][0]['text'])
+    
+for i in llms:
+    ask_model(i, question, 100)
+for i in range(3):
+    print(models[i] + ": " + ans[i])
+start_time = time.perf_counter()
+for i in llms:
+    ask_model(i, question, 100)
+for i in range(3):
+    print(models[i] + ": " + ans[i])
 
 end_time = time.perf_counter()
 elapsed_time = end_time - start_time
