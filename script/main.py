@@ -5,12 +5,10 @@ from dotenv import load_dotenv
 import time
 from multiprocessing import Pool
 import threading
+#this seems to make it faster
 os.environ['LLAMA_CPP_VULKAN'] = '1'
 os.environ['GGML_VULKAN_DEVICE'] = '0'
 from llama_cpp import Llama
-
-#TODO
-#auto kill kobold on any crash. probably gonna need a lot of try excepts. eats memory like an MF
 
 
 
@@ -26,19 +24,19 @@ models = [MODEL3, MODEL2, MODEL1]
 start_time = time.perf_counter()
 llm = Llama(
     model_path=MODEL1,
-    n_gpu_layers=25,  # use all gpu layers with vulkan
+    n_gpu_layers=25,  
     verbose=False
 )
 
 llm2 = Llama(
     model_path=MODEL2,
-    n_gpu_layers=25,  # use all gpu layers with vulkan
+    n_gpu_layers=25,  
     verbose=False
 )
 
 llm3 = Llama(
     model_path=MODEL3,
-    n_gpu_layers=25,  # use all gpu layers with vulkan
+    n_gpu_layers=25,  
     verbose=False
 )
 end_time = time.perf_counter()
