@@ -12,6 +12,7 @@ from llama_cpp import Llama
 
 
 
+
 #setup
 load_dotenv()
 db_host = os.getenv("DB_HOST")
@@ -24,21 +25,26 @@ models = [MODEL3, MODEL2, MODEL1]
 start_time = time.perf_counter()
 llm = Llama(
     model_path=MODEL1,
-    n_gpu_layers=25,  
-    verbose=False
+    n_gpu_layers=23,  
+    verbose=False,
+    n_ctx=2048,
 )
 
 llm2 = Llama(
     model_path=MODEL2,
-    n_gpu_layers=25,  
-    verbose=False
+    n_gpu_layers=23,  
+    verbose=False,
+    n_ctx=2048,
 )
 
 llm3 = Llama(
     model_path=MODEL3,
-    n_gpu_layers=25,  
-    verbose=False
+    n_gpu_layers=23,  
+    verbose=False,
+    n_ctx=2048,
 )
+
+print(hasattr(llm, 'create_chat_completion'))
 end_time = time.perf_counter()
 elapsed_time = end_time - start_time
 print(elapsed_time)
@@ -49,15 +55,31 @@ ans = []
 def ask_model(model, q, tokens):
     ans.append(model(q, max_tokens=tokens)['choices'][0]['text'])
     
-for i in llms:
-    ask_model(i, question, 100)
-for i in range(3):
-    print(models[i] + ": " + ans[i])
 start_time = time.perf_counter()
-for i in llms:
-    ask_model(i, question, 100)
+threads = []
+
+for llm in llms:
+    t = threading.Thread(target=ask_model, args=(llm, question, 100))
+    threads.append(t)
+
+for t in threads:
+    t.start()
+
+for t in threads:
+    t.join()
+
+
+
+
+# for i in llms:
+#     ask_model(i, question, 100)
 for i in range(3):
     print(models[i] + ": " + ans[i])
+# start_time = time.perf_counter()
+# for i in llms:
+#     ask_model(i, question, 100)
+# for i in range(3):
+#     print(models[i] + ": " + ans[i])
 
 end_time = time.perf_counter()
 elapsed_time = end_time - start_time
