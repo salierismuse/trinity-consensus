@@ -6,15 +6,14 @@ import time
 from multiprocessing import Pool
 import threading
 from sentence_transformers import SentenceTransformer
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+
 #this seems to make it faster
 os.environ['LLAMA_CPP_VULKAN'] = '1'
 os.environ['GGML_VULKAN_DEVICE'] = '0'
 from llama_cpp import Llama
 
 
-TOKENS = 100
+TOKENS = 150
 
 #setup
 load_dotenv()
@@ -79,7 +78,7 @@ ans = []
 
 #basic function for asking question
 def ask_model(model, q, tokens):
-    formatted_prompt = f"<|system|>\n{prompts[model]}<|end|>\n<|user|>\n{q}<|end|>\n<|assistant|>\n"
+    formatted_prompt = f"<|system|>{prompts[model]}\nRECOMMEND IN FIRST LINE ONLY IMMEDIATE ACTION, DO NOT BE VERBOSE\n<|end|>\n<|user|>\n{q}<|end|>\n<|assistant|>\n"
     responses[model].append(model(formatted_prompt, max_tokens=tokens)['choices'][0]['text'])
 
 # initial distribution of question
@@ -95,35 +94,99 @@ def ask_models(llms, q, tokens):
     for t in threads:
         t.join()
 def ask_model_deliberation(model, response1, response2, response3, tokens, q):
-   responses_text = f"YOU WERE ASKED: {q}\n\n YOUR RESPONSE, RESPONSE A WAS: {response1}\nResponse B WAS: {response2}\nResponse C WAS: {response3}\n"
-   formatted_prompt = f"<|system|>\n{dprompts[model]}<|end|>\n<|user|>\n{responses_text}<|end|>\n<|assistant|>\n"
+   responses_text = f"YOU WERE ASKED: {q}\n\n YOUR RESPONSE, RESPONSE A WAS: {response1}\nResponse B WAS: {response2}\nResponse C WAS: {response3}\n READING ALL OF THESE RESPONSES, WHAT DO YOU NOW RECOMMEND? YOUR FIRST LINE MUST LOOK LIKE RESPONSE A'S FIRST LINE IN TERMS OF FORMAT"
+   formatted_prompt = f"<|system|>\n{prompts[model]}<|end|>\n<|user|>\n{responses_text}<|end|>\n<|assistant|>\n"
    responses[model].append(model(formatted_prompt, max_tokens=tokens)['choices'][0]['text'])
     
 start_time = time.perf_counter()
 ask_models(llms, question, TOKENS)
-# ask_model_deliberation(llm1, responses[llms[0]][0], responses[llms[1]][0], responses[llms[2]][0], 150, question)
-# ask_model_deliberation(llm2, responses[llms[1]][0], responses[llms[2]][0], responses[llms[0]][0], 150, question)
-# ask_model_deliberation(llm3, responses[llms[2]][0], responses[llms[1]][0], responses[llms[0]][0], 150, question)
+
 
 # if 2/3 models agree, this is called on the outlier
 # it seeks to find a compromise
 
 
 def conditional_check(model, response1, response2, response3, tokens, q, x):
-   responses_text = f"YOU WERE ASKED: {q}\n\n YOUR RESPONSE WAS RESPONSE {x}.RESPONSE 1 WAS: {response1}\nResponse 2 WAS: {response2}\nResponse 3 WAS: {response3}\n"
+   responses_text = f"YOU WERE ASKED: {q}\n\n YOUR RESPONSE WAS RESPONSE {x}.RESPONSE 1 WAS: {response1}\nResponse 2 WAS: {response2}\nResponse 3 WAS: {response3}\nIS THERE ANY CONDITION THAT WOULD ALLOW YOU TO AGREE WITH RESPONSE 2 AND 3"
    formatted_prompt = f"<|system|>\n{conditional_prompts[x]}<|end|>\n<|user|>\n{responses_text}<|end|>\n<|assistant|>\n"
-   print((model(formatted_prompt, max_tokens=tokens)['choices'][0]['text']))
+   return (model(formatted_prompt, max_tokens=tokens)['choices'][0]['text'])
 
 decisions = []
 
 for i in range(3):
     response = responses[llms[i]][0]
-    first_line = response.split('\n')[0].strip()
+    first_line = response.split('\n')[0].strip().lower()
     decisions.append(first_line)
+    print(response)
+    print("------")
+print("---------")
 
 
 sent = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
+embeddings = sent.encode(decisions)
+
+for i in decisions:
+    print(i)
+print(embeddings.shape)
+
+
+
+similarities = sent.similarity(embeddings, embeddings)
+print(similarities)
+
+count = 0
+count2 = 0
+total = 0
+for i in similarities:
+    total += 1
+    count2 = 0
+    for ii in i:
+        if ii < .9:
+            count2+=1
+        if count2 == 2:
+            count += 1
+            cond_model = total-1
+            break
+
+
+decisions = []
+# zero outliers
+if count == 0:
+    print("TOTAL AGREEMENT")
+
+# # one outlier
+if count == 1:
+    print("PARTIAL DISAGREEMENT")
+    conditional_result = conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question, cond_model)
+    #proceed to deliberation
+    if "IMPOSSIBLE" in conditional_result:
+        ask_model_deliberation(llm1, responses[llms[0]][0], responses[llms[1]][0], responses[llms[2]][0], 150, question)
+        ask_model_deliberation(llm2, responses[llms[1]][0], responses[llms[2]][0], responses[llms[0]][0], 150, question)
+        ask_model_deliberation(llm3, responses[llms[2]][0], responses[llms[1]][0], responses[llms[0]][0], 150, question)
+        for i in range(3):
+            response = responses[llms[i]][-1]
+            first_line = response.split('\n')[0].strip().lower()
+            decisions.append(first_line)
+    else:
+        print(conditional_result)
+# no agreement anywhere
+if count > 1:
+    print("DISAGREEMENT")
+    print("-------------------")
+    ask_model_deliberation(llm1, responses[llms[0]][0], responses[llms[1]][0], responses[llms[2]][0], 150, question)
+    ask_model_deliberation(llm2, responses[llms[1]][0], responses[llms[2]][0], responses[llms[0]][0], 150, question)
+    ask_model_deliberation(llm3, responses[llms[2]][0], responses[llms[1]][0], responses[llms[0]][0], 150, question)
+    print("-------------")
+    for i in range(3):
+        response = responses[llms[i]][-1]
+        first_line = response.split('\n')[0].strip().lower()
+        decisions.append(first_line)
+        print(response)
+        print("------")
+print("\n")
+
+count = 0
 embeddings = sent.encode(decisions)
 
 for i in decisions:
@@ -148,20 +211,11 @@ for i in similarities:
             count += 1
             cond_model = total-1
             break
-
-# zero outliers
 if count == 0:
     print("TOTAL AGREEMENT")
-
-# # one outlier
 if count == 1:
     print("PARTIAL DISAGREEMENT")
-    conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question, cond_model)
-
-# no agreement anywhere
+    conditional_result = conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question, cond_model)
+    print(conditional_result)
 if count > 1:
     print("DISAGREEMENT")
-
-end_time = time.perf_counter()
-elapsed_time = end_time - start_time
-print(elapsed_time)
