@@ -31,6 +31,9 @@ SYS_PROMPT3 = os.getenv("SYS_PROMPT3")
 DSYS_PROMPT1 = os.getenv("DSYS_PROMPT1")
 DSYS_PROMPT2 = os.getenv("DSYS_PROMPT2")
 DSYS_PROMPT3 = os.getenv("DSYS_PROMPT3")
+CONDITIONAL_AGREEMENT_PROMPT1 = os.getenv("CONDITIONAL_AGREEMENT_PROMPT1")
+CONDITIONAL_AGREEMENT_PROMPT2 = os.getenv("CONDITIONAL_AGREEMENT_PROMPT2")
+CONDITIONAL_AGREEMENT_PROMPT3 = os.getenv("CONDITIONAL_AGREEMENT_PROMPT3")
 
 models = [MODEL1, MODEL2, MODEL3]
 start_time = time.perf_counter()
@@ -39,26 +42,26 @@ llm1 = Llama(
     model_path=MODEL1,
     n_gpu_layers = 28,  
     verbose=False,
-    n_ctx=4098,
+    n_ctx=2048,
 )
 
 llm2 = Llama(
     model_path=MODEL2,
     n_gpu_layers=28,  
     verbose=False,
-    n_ctx=4098,
+    n_ctx=2048,
 )
 
 llm3 = Llama(
     model_path=MODEL3,
     n_gpu_layers=0,  
     verbose=False,
-    n_ctx=4098,
+    n_ctx=2048,
 )
 
 prompts = {llm1: SYS_PROMPT1, llm2: SYS_PROMPT2, llm3: SYS_PROMPT3}
 dprompts = {llm1: DSYS_PROMPT1, llm2: DSYS_PROMPT2, llm3: DSYS_PROMPT3}
-
+conditional_prompts = [CONDITIONAL_AGREEMENT_PROMPT1, CONDITIONAL_AGREEMENT_PROMPT2, CONDITIONAL_AGREEMENT_PROMPT3]
 responses = {}
 responses[llm1] = []
 responses[llm2] = []
@@ -70,6 +73,7 @@ elapsed_time = end_time - start_time
 #startup time to load all three models 
 print(elapsed_time)
 llms = [llm1, llm2, llm3]
+
 question = input("")
 ans = []
 
@@ -101,26 +105,62 @@ ask_models(llms, question, TOKENS)
 # ask_model_deliberation(llm2, responses[llms[1]][0], responses[llms[2]][0], responses[llms[0]][0], 150, question)
 # ask_model_deliberation(llm3, responses[llms[2]][0], responses[llms[1]][0], responses[llms[0]][0], 150, question)
 
+# if 2/3 models agree, this is called on the outlier
+# it seeks to find a compromise
 
 
-print("\n" + "="*25 + " RESULTS " + "="*25)
+def conditional_check(model, response1, response2, response3, tokens, q, x):
+   responses_text = f"YOU WERE ASKED: {q}\n\n YOUR RESPONSE WAS RESPONSE {x}.RESPONSE 1 WAS: {response1}\nResponse 2 WAS: {response2}\nResponse 3 WAS: {response3}\n"
+   formatted_prompt = f"<|system|>\n{conditional_prompts[x]}<|end|>\n<|user|>\n{responses_text}<|end|>\n<|assistant|>\n"
+   print((model(formatted_prompt, max_tokens=tokens)['choices'][0]['text']))
 
 decisions = []
+
 for i in range(3):
     response = responses[llms[i]][0]
-    first_line = response.strip().split('\n')[0]
+    first_line = response.split('\n')[0].strip()
     decisions.append(first_line)
-    print(models[i] + ": " + response)
 
 
-sent = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+sent = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
 embeddings = sent.encode(decisions)
+
+for i in decisions:
+    print(i)
 print(embeddings.shape)
+
+
+
 similarities = sent.similarity(embeddings, embeddings)
 print(similarities)
 
+count = 0
+count2 = 0
+total = 0
+for i in similarities:
+    total += 1
+    count2 = 0
+    for ii in i:
+        if ii < .86:
+            count2+=1
+        if count2 == 2:
+            count += 1
+            cond_model = total-1
+            break
 
+# zero outliers
+if count == 0:
+    print("TOTAL AGREEMENT")
+
+# # one outlier
+if count == 1:
+    print("PARTIAL DISAGREEMENT")
+    conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question, cond_model)
+
+# no agreement anywhere
+if count > 1:
+    print("DISAGREEMENT")
 
 end_time = time.perf_counter()
 elapsed_time = end_time - start_time
