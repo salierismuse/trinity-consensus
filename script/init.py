@@ -7,7 +7,7 @@ from llama_cpp import Llama
 from sentence_transformers import SentenceTransformer
 sent = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
-TOKENS = 150
+TOKENS = 100
 
 #setup
 load_dotenv()
