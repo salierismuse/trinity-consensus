@@ -27,3 +27,10 @@ def conditional_check(model, response1, response2, response3, tokens, q, x):
    responses_text = f"Question: {q}\n\nResponse 1: {response1}\n\nResponse 2: {response2}\n\nResponse 3: {response3}\n\nYou were Response {x+1}."
    formatted_prompt = f"<|system|>\n{conditional_prompts[x]}<|end|>\n<|user|>\n{responses_text}<|end|>\n<|assistant|>\n"
    return (model(formatted_prompt, max_tokens=tokens)['choices'][0]['text'])
+
+def final_decision(model1, model2, model3, response1, response2, response3, tokens, q):
+    responses_text = f"Question: {q}\n\nResponse 1: {response1}\n\nResponse 2: {response2}\n\nResponse 3: {response3}\n"
+    formatted_prompt = f"<|system|>\n{FINAL_DECISION_PROMPT}<|end|>\n<|user|>\n{responses_text}<|end|>\n<|assistant|>\n"
+    return (DECISION_MODEL(formatted_prompt, max_tokens=tokens)['choices'][0]['text'])
+    
+    

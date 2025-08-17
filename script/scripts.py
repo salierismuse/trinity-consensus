@@ -1,4 +1,4 @@
-from deliberation import *
+from models_functions import *
 
 def check_similarity(decisions):
     embeddings = sent.encode(decisions)
@@ -46,10 +46,12 @@ def intermediary_rounds(llm1, llm2, llm3, question):
     count, cond_model = check_similarity(decisions)
     if count == 0:
         print("TOTAL AGREEMENT")
+        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return True
     if count == 1:
         print("PARTIAL DISAGREEMENT")
         final_round(llm1, llm2, llm3, question)
+        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return False
     if count > 1:
         print("DISAGREEMENT")
@@ -70,17 +72,16 @@ def round1(llm1, llm2, llm3, question):
     count, cond_model = check_similarity(decisions)
     if count == 0:
         print("TOTAL AGREEMENT")
-        return True
+        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
+        return decisions
     if count == 1:
         print("PARTIAL DISAGREEMENT")
         print("-------------------")
-        intermediary_rounds(llm1, llm2, llm3, question)
-        return False
+        return intermediary_rounds(llm1, llm2, llm3, question)
     if count > 1:
         print("DISAGREEMENT")
         print("-------------------")
-        intermediary_rounds(llm1, llm2, llm3, question)
-        return False
+        return intermediary_rounds(llm1, llm2, llm3, question)
 
 def reset_to_base():
     global decisions, ans
@@ -111,10 +112,19 @@ def final_round(llm1, llm2, llm3, question):
     
     if count == 0:
         print("TOTAL AGREEMENT")
+        print("----------FINAL DECISION--------")
+        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return True
     if count == 1:
         print("PARTIAL DISAGREEMENT")
-        print(conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 100, question, cond_model))
+        condition = conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 100, question, cond_model)
+        print("------FINALDECISION--------")
+        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
+        if "AGREEMENT IMPOSSIBLE" in condition:
+            print(cond_model + " cannot agree under any cirumstance.")
+        elif "TOTAL AGREEMENT" not in condition:
+            print(cond_model + "'S CONDITION: " + condition)
+        
         return False
     if count > 1:
         print("DISAGREEMENT")
