@@ -51,7 +51,6 @@ def intermediary_rounds(llm1, llm2, llm3, question):
     if count == 1:
         print("PARTIAL DISAGREEMENT")
         final_round(llm1, llm2, llm3, question)
-        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return False
     if count > 1:
         print("DISAGREEMENT")
@@ -119,12 +118,19 @@ def final_round(llm1, llm2, llm3, question):
         print("PARTIAL DISAGREEMENT")
         condition = conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 100, question, cond_model)
         print("------FINALDECISION--------")
-        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
+        resp = []
+        for i in llms:
+            if i != models[cond_model]:
+                resp.append(responses[i][-1])
         if "AGREEMENT IMPOSSIBLE" in condition:
-            print(cond_model + " cannot agree under any cirumstance.")
+            
+            print(final_decision_two(1, 2, resp[0], resp[1], 150, question))
+            print(models[cond_model] + "'S CONDITION: " + condition)
         elif "TOTAL AGREEMENT" not in condition:
-            print(cond_model + "'S CONDITION: " + condition)
-        
+            print(final_decision_two(1, 2, resp[0], resp[1], 150, question))
+            print(models[cond_model] + "'S CONDITION: " + condition)
+        else:
+            print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return False
     if count > 1:
         print("DISAGREEMENT")
