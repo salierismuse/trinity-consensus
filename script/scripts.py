@@ -1,86 +1,76 @@
 from models_functions import *
 
-def check_similarity(decisions):
-    embeddings = sent.encode(decisions)
-    for i in decisions:
-        print(i) 
-    print(embeddings.shape)
-    similarities = sent.similarity(embeddings, embeddings)
-    print(similarities)
-    count = 0
-    count2 = 0
-    cond_model = None
-    total = 0
-    for i in similarities:
-        total += 1
-        count2 = 0
-        for ii in i:
-            if ii < .9:
-                count2+=1
-            if count2 == 2:
-                count += 1
-                cond_model = total-1
-                break
-    embeddings = sent.encode(decisions)
-    return count, cond_model
+# model 3 now judges deterministically on canonical tokens from classify_response(...)
 
 def intermediary_rounds(llm1, llm2, llm3, question):
     global decisions
     orig_response1 = responses[llms[0]][-1]
     orig_response2 = responses[llms[1]][-1]
     orig_response3 = responses[llms[2]][-1]
-    
 
     ask_model_deliberation(llm1, orig_response1, orig_response2, orig_response3, 100, question, decisions[0], decisions[1], decisions[2])
     ask_model_deliberation(llm2, orig_response1, orig_response2, orig_response3, 100, question, decisions[0], decisions[1], decisions[2])
     ask_model_deliberation(llm3, orig_response1, orig_response2, orig_response3, 100, question, decisions[0], decisions[1], decisions[2])
 
     decisions = []
+    tops = []
     for i in range(3):
         response = responses[llms[i]][-1]
-        first_line = response.split('\n')[0].strip().lower()
-        decisions.append(first_line)
+        # classify whole response to a token
+        token = classify_response(response)
+        tops.append(token)
+        decisions.append(token)
         print(response)
         print("------")
     print("\n")
-    count, cond_model = check_similarity(decisions)
-    if count == 0:
+
+    status, outlier = judge_logical_equivalence_by_model3(llm3, question, tops[0], tops[1], tops[2])
+
+    if status == "total_same":
         print("TOTAL AGREEMENT")
-        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
+        print(final_decision(llm1, llm2, llm3,
+              responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return True
-    if count == 1:
+
+    if status == "partial_same":
         print("PARTIAL DISAGREEMENT")
         final_round(llm1, llm2, llm3, question)
         return False
-    if count > 1:
-        print("DISAGREEMENT")
-        final_round(llm1, llm2, llm3, question)
-        return False
-    
+
+    print("DISAGREEMENT")
+    final_round(llm1, llm2, llm3, question)
+    return False
+
 def round1(llm1, llm2, llm3, question):
     global decisions
     ask_models(llms, question, TOKENS)
-    count = 0
+
+    tops = []
     for i in range(3):
         response = responses[llms[i]][0]
-        first_line = response.split('\n')[0].strip().lower()
-        decisions.append(first_line)
+        token = classify_response(response)
+        tops.append(token)
+        decisions.append(token)
         print(response)
         print("------")
     print("---------")
-    count, cond_model = check_similarity(decisions)
-    if count == 0:
+
+    status, outlier = judge_logical_equivalence_by_model3(llm3, question, tops[0], tops[1], tops[2])
+
+    if status == "total_same":
         print("TOTAL AGREEMENT")
-        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
+        print(final_decision(llm1, llm2, llm3,
+              responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return decisions
-    if count == 1:
+
+    if status == "partial_same":
         print("PARTIAL DISAGREEMENT")
         print("-------------------")
         return intermediary_rounds(llm1, llm2, llm3, question)
-    if count > 1:
-        print("DISAGREEMENT")
-        print("-------------------")
-        return intermediary_rounds(llm1, llm2, llm3, question)
+
+    print("DISAGREEMENT")
+    print("-------------------")
+    return intermediary_rounds(llm1, llm2, llm3, question)
 
 def reset_to_base():
     global decisions, ans
@@ -99,40 +89,58 @@ def final_round(llm1, llm2, llm3, question):
     ask_model_deliberation(llm1, orig_response1, orig_response2, orig_response3, 100, question, decisions[0], decisions[1], decisions[2])
     ask_model_deliberation(llm2, orig_response1, orig_response2, orig_response3, 100, question, decisions[0], decisions[1], decisions[2])
     ask_model_deliberation(llm3, orig_response1, orig_response2, orig_response3, 100, question, decisions[0], decisions[1], decisions[2])
+
     decisions = []
+    tops = []
     for i in range(3):
         response = responses[llms[i]][-1]
-        first_line = response.split('\n')[0].strip().lower()
-        decisions.append(first_line)
+        token = classify_response(response)
+        tops.append(token)
+        decisions.append(token)
         print(response)
         print("------")
     print("\n")
-    count, cond_model = check_similarity(decisions)
-    
-    if count == 0:
+
+    status, outlier = judge_logical_equivalence_by_model3(llm3, question, tops[0], tops[1], tops[2])
+
+    if status == "total_same":
         print("TOTAL AGREEMENT")
         print("----------FINAL DECISION--------")
-        print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
+        print(final_decision(llm1, llm2, llm3,
+              responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return True
-    if count == 1:
+
+    if status == "partial_same":
         print("PARTIAL DISAGREEMENT")
-        condition = conditional_check(llms[cond_model], responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 100, question, cond_model)
+        # use explicit outlier if present; else default to model 3 as tiebreaker
+        if outlier in (1, 2, 3):
+            cond_model = outlier - 1
+        else:
+            cond_model = 2  # model 3 index
+
+        condition = conditional_check(llms[cond_model],
+                                      responses[llms[0]][-1],
+                                      responses[llms[1]][-1],
+                                      responses[llms[2]][-1],
+                                      100, question, cond_model)
+
         print("------FINALDECISION--------")
+        # collect the two non-outlier responses by index
         resp = []
-        for i in llms:
-            if i != models[cond_model]:
-                resp.append(responses[i][-1])
-        if "AGREEMENT IMPOSSIBLE" in condition:
-            
-            print(final_decision_two(1, 2, resp[0], resp[1], 150, question))
+        for i, m in enumerate(llms):
+            if i != cond_model:
+                resp.append(responses[m][-1])
+
+        if "AGREEMENT IMPOSSIBLE" in condition or "AGREEMENT_IMPOSSIBLE" in condition:
+            print(final_decision_two(llm1, llm2, resp[0], resp[1], 150, question))
             print(models[cond_model] + "'S CONDITION: " + condition)
-        elif "TOTAL AGREEMENT" not in condition:
-            print(final_decision_two(1, 2, resp[0], resp[1], 150, question))
+        elif "TOTAL AGREEMENT" not in condition and "TOTAL_AGREEMENT" not in condition:
+            print(final_decision_two(llm1, llm2, resp[0], resp[1], 150, question))
             print(models[cond_model] + "'S CONDITION: " + condition)
         else:
-            print(final_decision(llm1, llm2, llm3, responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
-        return False
-    if count > 1:
-        print("DISAGREEMENT")
+            print(final_decision(llm1, llm2, llm3,
+                  responses[llms[0]][-1], responses[llms[1]][-1], responses[llms[2]][-1], 150, question))
         return False
 
+    print("DISAGREEMENT")
+    return False
